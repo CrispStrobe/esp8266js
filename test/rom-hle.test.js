@@ -147,12 +147,12 @@ test('single arithmetic and conversions', () => {
 
 test('a ROM function with no stand-in stops the run by name, and is counted', () => {
   const m = machine();
-  assert.ok(m.rom.missing.includes('ets_run'), 'ets_run has no stand-in yet');
+  assert.ok(m.rom.missing.includes('MD5Init'), 'MD5Init has no stand-in');
   m.core.setAR(0, RETURN_TO);
-  m.core.PC = ROM_SYMBOLS.ets_run;
+  m.core.PC = ROM_SYMBOLS.MD5Init;
   assert.throws(() => m.core.runInstruction(), (e) => e instanceof RomFunctionMissing &&
-    e.romFunction === 'ets_run' && e.caller === RETURN_TO && /does not provide yet/.test(e.message));
-  assert.equal(m.rom.calls.get('ets_run'), 1);
+    e.romFunction === 'MD5Init' && e.caller === RETURN_TO && /does not provide yet/.test(e.message));
+  assert.equal(m.rom.calls.get('MD5Init'), 1);
   m.call('strlen', RAM);
   m.call('strlen', RAM);
   assert.equal(m.rom.calls.get('strlen'), 2);
