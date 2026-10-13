@@ -26,7 +26,8 @@ jobs:
           node -r ts-node/register/transpile-only --test test/ 2>&1 | tee out.txt
           # A run that loaded nothing reports zero tests and zero failures.
           tests=$(sed -n 's/^# tests \([0-9]*\)$/\1/p' out.txt | tail -1)
-          [ "${tests:-0}" -ge 29 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
+          # 28 before lwIP and the bridge; +5 lwIP host tests, +1 own-ip (skips here), +1 bridge.
+          [ "${tests:-0}" -ge 35 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
 
   own-firmware:
     # Our own blob-free firmware: built with the stock compiler from firmware/,
@@ -36,8 +37,25 @@ jobs:
       ARDUINO_CLI_VERSION: '1.1.1'
       ESP8266_CORE: 'esp8266:esp8266@3.1.2'
       ESP8266_INDEX: 'https://arduino.esp8266.com/stable/package_esp8266com_index.json'
+      # lwIP (BSD-3-Clause) is not kept in this repository: it is fetched here,
+      # at the commit of its release tag STABLE-2_2_0_RELEASE. See firmware/THIRD-PARTY.md.
+      LWIP_REPOSITORY: 'lwip-tcpip/lwip'
+      LWIP_COMMIT: '0a0452b2c39bdd91e252aef045c115f88f6ca773'
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch lwIP at the pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LWIP_REPOSITORY }}
+          ref: ${{ env.LWIP_COMMIT }}
+          path: lwip-src
+          persist-credentials: false
+      - name: Check that it is that commit
+        run: |
+          set -euo pipefail
+          got=$(git -C lwip-src rev-parse HEAD)
+          [ "$got" = "$LWIP_COMMIT" ] || { echo "::error::lwIP is at $got, expected $LWIP_COMMIT"; exit 1; }
+          [ -z "$(git -C lwip-src status --porcelain)" ] || { echo "::error::the lwIP checkout is modified"; exit 1; }
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -69,15 +87,53 @@ jobs:
             fi
             node tools/elf2image.js out/$program.elf out/$program.bin
           done
+      - name: Build net-ip with lwIP
+        run: |
+          set -euo pipefail
+          gcc=$(find "$HOME/.arduino15" -type f -path '*/bin/xtensa-lx106-elf-gcc' | head -1)
+          [ -x "$gcc" ] || { echo "::error::no xtensa-lx106-elf-gcc"; exit 1; }
+          # Only the compiler's own freestanding headers (stdint.h, stddef.h):
+          # no C library headers, and none is linked. string.h and stdlib.h
+          # are the small ones in firmware/lwip-port/libc.
+          flags="-Os -ffreestanding -nostdinc -isystem $("$gcc" -print-file-name=include)
+            -mlongcalls -mtext-section-literals -ffunction-sections -fdata-sections
+            -I firmware -I firmware/lwip-port -I firmware/lwip-port/libc -I lwip-src/src/include"
+          # Objects in a directory named irom-obj are linked to run from flash (firmware/bw8266.ld).
+          mkdir -p out/irom-obj
+          for source in lwip-src/src/core/*.c lwip-src/src/core/ipv4/*.c lwip-src/src/netif/ethernet.c; do
+            "$gcc" $flags -Wall -c "$source" -o "out/irom-obj/lwip-$(basename "${source%.c}").o"
+          done
+          for source in firmware/lwip-port/*.c firmware/net-ip.c; do
+            "$gcc" $flags -Wall -Wextra -Werror -c "$source" -o "out/irom-obj/$(basename "${source%.c}").o"
+          done
+          "$gcc" -Os -ffreestanding -nostdlib -nostartfiles -mlongcalls -mtext-section-literals \
+            -Wall -Wextra -Werror -I firmware \
+            -T firmware/bw8266.ld -L firmware -Wl,--gc-sections -Wl,-Map,out/net-ip.map \
+            firmware/runtime.c firmware/net.c out/irom-obj/*.o -lgcc -o out/net-ip.elf
+          if grep -E 'tools/sdk|libmain|libphy|libpp|libnet80211|libwpa|liblwip|cores/esp8266' out/net-ip.map; then
+            echo "::error::net-ip: the link pulled in SDK or Arduino core code"; exit 1
+          fi
+          # Besides our objects and the lwIP ones built above, only libgcc may be loaded.
+          if grep -E '^LOAD ' out/net-ip.map | grep -vE '^LOAD (/tmp/[^ ]*\.o|out/irom-obj/[^ ]*\.o|[^ ]*/libgcc\.a)$'; then
+            echo "::error::net-ip: the link loaded something unexpected"; exit 1
+          fi
+          # The stack must really be linked to run from flash.
+          grep -q '^\.irom\.text  *0x0*40210000' out/net-ip.map || { echo "::error::net-ip: no code in flash"; exit 1; }
+          node tools/elf2image.js out/net-ip.elf out/net-ip.bin
+          "${gcc%gcc}size" -A out/net-ip.elf | grep -E '^\.(irom\.text|text|data|bss) ' || true
+          # The image holds lwIP in binary form: its notice travels with it.
+          cp firmware/THIRD-PARTY.md out/
+          ls -l out/*.bin
       - name: Run it without the ROM
         env:
           TS_NODE_PROJECT: tsconfig.ts-node.json
           BW8266_BLINK: out/blink.bin
           BW8266_NET: out/net-hello.bin
+          BW8266_IP: out/net-ip.bin
         run: |
           set -euo pipefail
-          node -r ts-node/register/transpile-only --test test/own-firmware.test.js test/own-net.test.js 2>&1 | tee out.txt
-          grep -q '^# pass 3$' out.txt || { echo "::error::the own-firmware tests did not all run and pass"; exit 1; }
+          node -r ts-node/register/transpile-only --test test/own-firmware.test.js test/own-net.test.js test/own-ip.test.js 2>&1 | tee out.txt
+          grep -q '^# pass 4$' out.txt || { echo "::error::the own-firmware tests did not all run and pass"; exit 1; }
           grep -q '^# skipped 0$' out.txt || { echo "::error::an own-firmware test was skipped"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always()

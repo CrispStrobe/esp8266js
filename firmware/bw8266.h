@@ -45,6 +45,8 @@ void ets_isr_attach(int number, void (*routine)(void *), void *argument);
 void ets_isr_unmask(u32 mask);
 void rom_uart_div_modify(int uart, u32 divider);
 void ets_delay_us(u32 microseconds);
+/* Map flash into the address space at 0x40200000: (0, 0, 1) maps the first megabyte from offset 0. */
+void Cache_Read_Enable(u32 odd_even, u32 megabyte_pair, u32 one_megabyte);
 
 /* This runtime (runtime.c) */
 void bw_serial_begin(u32 baud);

@@ -1,4 +1,9 @@
-/* Start-up, serial output and a millisecond clock. See bw8266.h. */
+/*
+ * Start-up, serial output and a millisecond clock. See bw8266.h.
+ *
+ * All of this file is linked into instruction RAM: it runs before flash is
+ * mapped (bw_start) or from an interrupt (tick).
+ */
 #include "bw8266.h"
 
 extern u32 _bss_start, _bss_end;
@@ -7,6 +12,8 @@ void bw_start(void) __attribute__((section(".entry.text"), noreturn));
 void bw_start(void) {
   /* The stack pointer is the one the ROM's loader left. */
   for (u32 *p = &_bss_start; p < &_bss_end; p++) *p = 0;
+  /* Code linked for flash (the irom region of bw8266.ld) cannot run until flash is mapped. */
+  Cache_Read_Enable(0, 0, 1);
   main();
   for (;;) {
   }

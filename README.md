@@ -23,8 +23,12 @@ radio.
 `firmware/` is a small bare-metal runtime of our own (start-up, serial
 output, a millisecond clock, pins) and a blink program built on it. It
 contains no Espressif SDK code and links against nothing but itself and the
-compiler's libgcc; CI checks the link map for that, builds the image with
-`tools/elf2image.js` and runs it here without the ROM. Stock Arduino images
+compiler's libgcc (and, for `net-ip` below, lwIP); CI checks the link map for
+that, builds the image with `tools/elf2image.js` and runs it here without the
+ROM. Small programs run entirely from RAM. Larger ones also run in place from
+flash: the linker script (`firmware/bw8266.ld`) has a region for code at flash
+offset 0x10000, mapped at 0x40210000 once start-up has asked the ROM for the
+mapping, and the image tool writes it there behind the boot image. Stock Arduino images
 are a different matter: they always carry Espressif's SDK libraries, whose
 licence limits their use to the ESP8266 itself, and this repository's CI does
 not run them.
@@ -42,8 +46,56 @@ side; `firmware/net-hello.c` joins a network, greets everyone on it and prints
 what it hears.
 
 Membership and delivery are modelled. Radio behaviour is not: no range, loss,
-channels, timing or encryption. No TCP/IP stack runs on it yet; the device is
-frame-level so that one can.
+channels, timing or encryption.
+
+### TCP/IP: lwIP on the firmware side
+
+`firmware/lwip-port/` is a port of [lwIP](https://savannah.nongnu.org/projects/lwip/)
+2.2.0 to that runtime and that network device: no operating system
+(`NO_SYS`), lwIP's raw callback API, IPv4 with ARP, ICMP, UDP, TCP, a DHCP
+client and a DNS client. lwIP is BSD-licensed and is not kept in this
+repository: CI fetches it at a pinned commit (`firmware/THIRD-PARTY.md`). No
+C library is linked; the handful of memory and string functions lwIP calls
+are the chip's ROM entries, which have stand-ins here.
+
+`firmware/net-ip.c` uses it: it joins the network, gets an address by DHCP,
+resolves `museum.lan` by DNS, fetches `http://museum.lan/hall` over TCP and
+prints one line per step. `test/own-ip.test.js` runs the built image against
+the other end of that exchange.
+
+Sizes, as CI built them (xtensa-lx106-elf-gcc of the Arduino ESP8266 package
+3.1.2, `-Os`):
+
+| image | file | in RAM (boot image) | in flash |
+|---|---|---|---|
+| `blink` | 944 bytes | 944 bytes | none |
+| `net-hello` | 1,264 bytes | 1,264 bytes | none |
+| `net-ip` | 108,860 bytes | 880 bytes | 43,324 bytes at offset 0x10000 |
+
+`net-ip`'s file is mostly the erased gap between the two. Of its code and
+constants, 43.3 KB (lwIP, the port, the program) run from flash and 0.8 KB
+from instruction RAM; it uses 39.6 KB of the 80 KB of data RAM for lwIP's
+heap and packet pool and its own buffers.
+
+What this is not:
+
+- **The other end is test scaffolding.** There is no host-side IP stack in
+  this repository. `test/helpers/ip-responder.js` answers exactly what
+  `net-ip` asks (ARP, one DHCP lease, one DNS name, one HTTP request per TCP
+  connection), with correct checksums and nothing more: no retransmission, no
+  time-outs, no windows.
+- **No TLS, no IPv6**, no sockets API (there are no threads to block), no IP
+  fragmentation or reassembly, no multicast.
+- **The driver is polled** from the program's main loop; the device's receive
+  interrupt is not used. A program that stops calling `bwnetif_poll` and
+  `sys_check_timeouts` stops the stack.
+- **The DHCP client does not probe its address for a conflict** before using
+  it (lwIP's ARP probing is switched off; with it, binding takes seconds).
+- **Random numbers are not secret.** Transaction ids and port numbers come
+  from a small generator seeded with the network address and the clock.
+- **It has only run here.** The network device does not exist on a real
+  chip, so neither does this interface; the flash-mapped layout follows the
+  chip's documented mapping but has not been tried on hardware.
 
 The goal is a ROM-free boot: our own stand-ins for the ROM functions that
 firmware actually calls. `census/` and the `rom-census` workflow measure which
