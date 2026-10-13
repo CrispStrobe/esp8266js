@@ -26,7 +26,7 @@ jobs:
           node -r ts-node/register/transpile-only --test test/ 2>&1 | tee out.txt
           # A run that loaded nothing reports zero tests and zero failures.
           tests=$(sed -n 's/^# tests \([0-9]*\)$/\1/p' out.txt | tail -1)
-          [ "${tests:-0}" -ge 28 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
+          [ "${tests:-0}" -ge 29 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
 
   own-firmware:
     # Our own blob-free firmware: built with the stock compiler from firmware/,

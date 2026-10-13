@@ -128,3 +128,37 @@ test('a host-side station takes part: it hears a board and answers it', () => {
   assert.equal(Buffer.from(reply).subarray(14).toString(), 'welcome');
   assert.deepEqual([...reply.subarray(6, 12)], [...mac(0xee)]);
 });
+
+test('an access point bridged to an outside wire: both sides hear each other, by address on this side', () => {
+  // The wire is a hub of the shape bw-board's NE2000 hub and LAN have.
+  const wire = {
+    members: [],
+    attach(m) { this.members.push(m); m.link = this; return m; },
+    send(frame, from) { for (const m of this.members) if (m !== from) m.deliver(Uint8Array.from(frame)); },
+  };
+  const pcHeard = [];
+  const pc = wire.attach({ deliver: (f) => pcHeard.push(Buffer.from(f).subarray(14).toString()) });
+  const world = new NetWorld();
+  world.addAccessPoint('lab');
+  world.addAccessPoint('other');
+  assert.throws(() => world.bridge('nowhere', wire), /no such access point/);
+  world.bridge('lab', wire);
+  const [x, y, z] = [board(world, 1), board(world, 2), board(world, 3)];
+  x.join('lab', ''); y.join('lab', ''); z.join('other', '');
+
+  x.send(frameTo(mac(0x77), mac(1), 'to the pc'));
+  assert.deepEqual(pcHeard, ['to the pc'], 'a frame for an address not on the access point reaches the wire');
+  assert.equal(y.receive(), null, 'and not the other board');
+
+  wire.send(frameTo(mac(2), mac(0x77), 'to board 2'), pc);
+  assert.equal(Buffer.from(y.receive()).subarray(14).toString(), 'to board 2');
+  assert.equal(x.receive(), null, 'unicast from the wire goes to its destination only');
+  wire.send(frameTo(BROADCAST, mac(0x77), 'everyone'), pc);
+  assert.equal(Buffer.from(x.receive()).subarray(14).toString(), 'everyone');
+  assert.equal(Buffer.from(y.receive()).subarray(14).toString(), 'everyone');
+  assert.equal(z.receive(), null, 'not across to another access point');
+  assert.deepEqual(pcHeard, ['to the pc'], 'and the wire does not hear its own frame back');
+  x.send(frameTo(BROADCAST, mac(1), 'hello all'));
+  assert.deepEqual(pcHeard, ['to the pc', 'hello all']);
+  assert.equal(Buffer.from(y.receive()).subarray(14).toString(), 'hello all');
+});

@@ -32,6 +32,12 @@ export interface IStation extends INetMember {
   leave(): void;
 }
 
+/** An outside wire an access point can be bridged to (bw-board's hub and LAN have this shape). */
+export interface ILink {
+  attach(member: { deliver(frame: Uint8Array): void }): unknown;
+  send(frame: Uint8Array, from: unknown): void;
+}
+
 export type JoinResult = 'joined' | 'no such network' | 'wrong password';
 
 function sameMac(a: Uint8Array, b: Uint8Array, offset = 0) {
@@ -45,6 +51,7 @@ export function macText(mac: Uint8Array) {
 
 export class NetWorld {
   private readonly accessPoints = new Map<string, { password: string; members: Set<INetMember> }>();
+  private readonly bridges = new Map<INetMember, ILink>();
   /** Frames accepted from members, and frames handed to members. */
   readonly counters = { sent: 0, delivered: 0, refused: 0 };
 
@@ -90,12 +97,62 @@ export class NetWorld {
     let handed = 0;
     for (const member of this.accessPoints.get(ssid)!.members) {
       if (member === from) continue;
+      const wire = this.bridges.get(member);
+      if (wire) {
+        // The wire is a hub: it gets every frame and its own members filter.
+        wire.send(frame.slice(), member);
+        handed++;
+        continue;
+      }
       if (!group && !sameMac(member.mac, frame)) continue;
       member.deliver(frame.slice());
       handed++;
     }
     this.counters.delivered += handed;
     return handed;
+  }
+
+  /**
+   * Join an access point to an outside wire, so that its members and the
+   * wire's hear each other. `link` is anything with `attach(member)` and
+   * `send(frame, from)` that gives members frames through `deliver(frame)`:
+   * the shape of bw-board's NE2000 hub and shared LAN, which is how a board
+   * here shares a network with an emulated PC or a host-side IPv4 node there.
+   *
+   * The access point stays what it is: it delivers by destination address.
+   * Frames from the wire are delivered the same way, so a frame for a station
+   * that is not on this access point goes nowhere.
+   */
+  bridge(ssid: string, link: ILink) {
+    const ap = this.accessPoints.get(ssid);
+    if (!ap) throw new Error(`cannot bridge "${ssid}": no such access point`);
+    // To the wire the whole access point is one member; to the access point the wire is one.
+    const port: INetMember & { link?: unknown } = {
+      mac: Uint8Array.from([0, 0, 0, 0, 0, 0]),
+      deliver: (frame) => this.fromWire(ap, port, frame),
+    };
+    this.bridges.set(port, link);
+    ap.members.add(port);
+    link.attach(port);
+    return port;
+  }
+
+  private fromWire(
+    ap: { members: Set<INetMember> },
+    port: INetMember,
+    frame: Uint8Array
+  ) {
+    if (frame.length < MIN_FRAME || frame.length > MAX_FRAME) {
+      this.counters.refused++;
+      return;
+    }
+    const group = (frame[0] & 1) === 1;
+    for (const member of ap.members) {
+      if (member === port || this.bridges.has(member)) continue;
+      if (!group && !sameMac(member.mac, frame)) continue;
+      member.deliver(frame.slice());
+      this.counters.delivered++;
+    }
   }
 
   /**
