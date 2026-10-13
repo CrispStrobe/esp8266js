@@ -15,7 +15,7 @@ under the same MIT licence. It differs in one deliberate way so far:
 
 `src/rom/` holds the stand-ins written so far (`RomHle`): the C library
 memory and string functions and libgcc's integer and soft-float arithmetic,
-40 of the 97 ROM entries stock Arduino sketches link against. A ROM entry with
+41 of the 97 ROM entries stock Arduino sketches link against. A ROM entry with
 no stand-in stops the run and names the function. Not provided yet: the task
 scheduler and interrupt entry, UART and printf, SPI flash, and everything
 radio.
