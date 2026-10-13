@@ -1,0 +1,73 @@
+name: ROM census
+
+# Which mask-ROM functions does a stock Arduino ESP8266 sketch call?
+# Builds a few small sketches with the Arduino core and lists the ROM-window
+# symbols each linked image refers to. No ROM image is downloaded or run.
+
+on:
+  push:
+    paths: ['census/**', '.github/workflows/rom-census.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ARDUINO_CLI_VERSION: '1.1.1'
+  ESP8266_CORE: 'esp8266:esp8266@3.1.2'
+  ESP8266_INDEX: 'https://arduino.esp8266.com/stable/package_esp8266com_index.json'
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: npx tsc --noEmit -p tsconfig.json
+
+  census:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install arduino-cli and the ESP8266 core
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/bin"
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/v${ARDUINO_CLI_VERSION}/install.sh \
+            | BINDIR="$HOME/bin" sh -s "${ARDUINO_CLI_VERSION}"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          "$HOME/bin/arduino-cli" core update-index --additional-urls "$ESP8266_INDEX"
+          "$HOME/bin/arduino-cli" core install "$ESP8266_CORE" --additional-urls "$ESP8266_INDEX"
+      - name: Build the sketches and list their ROM symbols
+        run: |
+          set -euo pipefail
+          nm=$(find "$HOME/.arduino15" -name 'xtensa-lx106-elf-nm' | head -1)
+          [ -x "$nm" ] || { echo "::error::no xtensa-lx106-elf-nm in the installed core"; exit 1; }
+          mkdir -p out
+          for s in blink serial pwm; do
+            arduino-cli compile -b esp8266:esp8266:nodemcuv2 --output-dir "out/$s" "census/$s"
+            elf=$(ls out/$s/*.elf | head -1)
+            census/rom-symbols.sh "$nm" "$elf" > "out/$s.rom-symbols.txt"
+            n=$(wc -l < "out/$s.rom-symbols.txt")
+            [ "$n" -gt 0 ] || { echo "::error::$s: no ROM-window symbols found — the listing is broken, not empty"; exit 1; }
+            {
+              echo "### $s — $n ROM symbols"
+              echo '```'
+              cat "out/$s.rom-symbols.txt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+          cat out/*.rom-symbols.txt | awk '{print $3}' | sort -u > out/union.txt
+          echo "### union — $(wc -l < out/union.txt) distinct ROM symbols" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rom-census
+          path: |
+            out/*.txt
+            out/*/*.elf
+            out/*/*.bin
+            out/*/*.map
+          if-no-files-found: error

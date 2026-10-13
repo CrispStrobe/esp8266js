@@ -17,6 +17,7 @@ const args = arg(
     '--input-raw': Boolean,
     '--exit-on-reset': Boolean,
     '--pid-file': String,
+    '--rom': String,
     '--throttle': Number,
     '-a': '--app',
     '-g': '--gdb',
@@ -50,7 +51,18 @@ const simulator = new Simulator(cpu);
 if (throttle > 0 && throttle <= 100) {
   simulator.throttle = throttle;
 }
-cpu.loadROM(readFileSync('rom/esp8266_rom.bin'));
+// This fork does not ship Espressif's mask ROM (it is not ours to license).
+// Until the ROM-free boot lands, a ROM image has to be supplied by the user.
+const romFile = args['--rom'];
+if (!romFile) {
+  console.error('');
+  console.error(
+    chalk.red('error'),
+    'No ROM image. This fork does not include the ESP8266 mask ROM; pass your own with --rom <file>.'
+  );
+  process.exit(3);
+}
+cpu.loadROM(readFileSync(romFile));
 
 const fileList = args._;
 
