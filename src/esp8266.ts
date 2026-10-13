@@ -100,7 +100,13 @@ export class ESP8266 {
       new ESP8266DPort(this, DPORT_START, 'DPort Register'),
       new ESP8266WDev(this, WDEV_START, 'WDEV'),
       new ESP8266HDRF(this, 0x60000500, 'HDRF'),
-      new ESPFRC(this, 0x60000600, 'FRC', ESP8266Interrupts.ETS_FRC_TIMER2),
+      new ESPFRC(
+        this,
+        0x60000600,
+        'FRC',
+        ESP8266Interrupts.ETS_FRC_TIMER2,
+        ESP8266Interrupts.ETS_FRC_TIMER1
+      ),
       new ESP8266RTC(this, 0x60000700, 'RTC'),
       new ESP8266IOMUX(this, 0x60000800, 'IO MUX', this.gpio),
       new UnimplementedPeripheral(this, 0x60000900, 'WDT'),

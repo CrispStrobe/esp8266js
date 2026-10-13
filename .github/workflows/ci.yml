@@ -26,8 +26,8 @@ jobs:
           node -r ts-node/register/transpile-only --test test/ 2>&1 | tee out.txt
           # A run that loaded nothing reports zero tests and zero failures.
           tests=$(sed -n 's/^# tests \([0-9]*\)$/\1/p' out.txt | tail -1)
-          # 28 before lwIP and the bridge; +5 lwIP host tests, +1 own-ip, +1 bridge, +2 sketches (the image tests skip here).
-          [ "${tests:-0}" -ge 37 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
+          # 28 before lwIP and the bridge; +5 lwIP host tests, +1 own-ip, +1 bridge, +2 sketches (the image tests skip here), +4 first-timer tests.
+          [ "${tests:-0}" -ge 41 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
 
   own-firmware:
     # Our own blob-free firmware: built with the stock compiler from firmware/,
