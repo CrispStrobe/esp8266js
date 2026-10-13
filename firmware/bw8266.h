@@ -1,0 +1,58 @@
+/*
+ * A small bare-metal runtime for the ESP8266, with no Espressif SDK code.
+ *
+ * Register addresses and bit meanings are the chip's, written out here from
+ * public documentation of the peripherals; no vendor header is included. The
+ * ROM functions declared below are the chip's own mask ROM entry points.
+ */
+#ifndef BW8266_H
+#define BW8266_H
+
+typedef unsigned int u32;
+
+#define REG(addr) (*(volatile u32 *)(addr))
+
+/* GPIO */
+#define GPIO_OUT_W1TS REG(0x60000304)
+#define GPIO_OUT_W1TC REG(0x60000308)
+#define GPIO_ENABLE_W1TS REG(0x60000310)
+#define GPIO_IN REG(0x60000318)
+/* Pin function select for GPIO2 (the on-board LED of most modules): bits 4, 5, 8; 0 = GPIO. */
+#define IOMUX_GPIO2 REG(0x60000838)
+
+/* UART0 */
+#define UART0_FIFO REG(0x60000000)
+#define UART0_STATUS REG(0x6000001C)
+#define UART0_TXFIFO_COUNT ((UART0_STATUS >> 16) & 0xff)
+
+/* The second hardware timer (FRC2): a free-running up counter with an alarm. */
+#define FRC2_COUNT REG(0x60000624)
+#define FRC2_CTRL REG(0x60000628)
+#define FRC2_ALARM REG(0x60000630)
+#define FRC2_ENABLE (1u << 7)
+#define FRC2_DIVIDE_16 (2u << 1)
+#define FRC2_INTERRUPT 10
+/* Lets FRC2's alarm reach the CPU as an edge interrupt. */
+#define DPORT_EDGE_INT_ENABLE REG(0x3FF00004)
+#define DPORT_EDGE_INT_FRC2 (1u << 2)
+
+/* The peripheral clock, and FRC2 ticks per millisecond at divide-by-16. */
+#define APB_HZ 80000000u
+#define FRC2_TICKS_PER_MS (APB_HZ / 16u / 1000u)
+
+/* Mask ROM */
+void ets_isr_attach(int number, void (*routine)(void *), void *argument);
+void ets_isr_unmask(u32 mask);
+void rom_uart_div_modify(int uart, u32 divider);
+void ets_delay_us(u32 microseconds);
+
+/* This runtime (runtime.c) */
+void bw_serial_begin(u32 baud);
+void bw_serial_write(const char *text);
+void bw_millis_begin(void);
+u32 bw_millis(void);
+void bw_interrupts_on(void);
+
+int main(void);
+
+#endif

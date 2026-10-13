@@ -20,6 +20,15 @@ no stand-in stops the run and names the function. Not provided yet: the task
 scheduler and interrupt entry, UART and printf, SPI flash, and everything
 radio.
 
+`firmware/` is a small bare-metal runtime of our own (start-up, serial
+output, a millisecond clock, pins) and a blink program built on it. It
+contains no Espressif SDK code and links against nothing but itself and the
+compiler's libgcc; CI checks the link map for that, builds the image with
+`tools/elf2image.js` and runs it here without the ROM. Stock Arduino images
+are a different matter: they always carry Espressif's SDK libraries, whose
+licence limits their use to the ESP8266 itself, and this repository's CI does
+not run them.
+
 The goal is a ROM-free boot: our own stand-ins for the ROM functions that
 firmware actually calls. `census/` and the `rom-census` workflow measure which
 ones those are for stock Arduino sketches.
