@@ -53,7 +53,8 @@ jobs:
       - name: Build the programs
         run: |
           set -euo pipefail
-          gcc=$(find "$HOME/.arduino15" -name 'xtensa-lx106-elf-gcc' | head -1)
+          # The package directory has the compiler's name too: take the file in bin/.
+          gcc=$(find "$HOME/.arduino15" -type f -path '*/bin/xtensa-lx106-elf-gcc' | head -1)
           [ -x "$gcc" ] || { echo "::error::no xtensa-lx106-elf-gcc"; exit 1; }
           mkdir -p out
           for program in blink net-hello; do

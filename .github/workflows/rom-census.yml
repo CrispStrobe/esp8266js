@@ -34,7 +34,7 @@ jobs:
       - name: Build the sketches and list their ROM symbols
         run: |
           set -euo pipefail
-          nm=$(find "$HOME/.arduino15" -name 'xtensa-lx106-elf-nm' | head -1)
+          nm=$(find "$HOME/.arduino15" -type f -path '*/bin/xtensa-lx106-elf-nm' | head -1)
           [ -x "$nm" ] || { echo "::error::no xtensa-lx106-elf-nm in the installed core"; exit 1; }
           mkdir -p out
           for s in blink serial pwm; do
