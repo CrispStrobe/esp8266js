@@ -21,6 +21,7 @@ export function cliHelp() {
       {green --throttle} <THROTTLE>       Throttle the CPU to the given percentage (1-100). Default: 0 (no throttle)
       {green --exit-on-reset}             Exit when the simulated program resets (exit code 42)
       {green --pid-file} filename.pid     Write the process id to the given file
+      {green --rom} rom.bin               The ESP8266 mask ROM image to boot through (not included)
       {green --quiet}, {green -q}                 Do not print logo, version, etc.
 `);
 }
