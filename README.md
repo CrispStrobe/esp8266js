@@ -29,6 +29,22 @@ are a different matter: they always carry Espressif's SDK libraries, whose
 licence limits their use to the ESP8266 itself, and this repository's CI does
 not run them.
 
+### A simulated Wi-Fi world
+
+The chip's own Wi-Fi lives in Espressif's radio libraries and is not
+simulated. Instead there is a simulated network (`src/net/world.ts`): access
+points with a name and a password, and members that exchange Ethernet frames
+through them. Members are boards, through a network device that exists only
+in this simulator (`src/peripherals/bwnet.ts`, at 0x60000C00, register map in
+the file), and host-side stations a test or an application adds, which is how
+anything that is not a board takes part. `firmware/net.c` is the firmware
+side; `firmware/net-hello.c` joins a network, greets everyone on it and prints
+what it hears.
+
+Membership and delivery are modelled. Radio behaviour is not: no range, loss,
+channels, timing or encryption. No TCP/IP stack runs on it yet; the device is
+frame-level so that one can.
+
 The goal is a ROM-free boot: our own stand-ins for the ROM functions that
 firmware actually calls. `census/` and the `rom-census` workflow measure which
 ones those are for stock Arduino sketches.

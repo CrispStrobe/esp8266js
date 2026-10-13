@@ -53,6 +53,22 @@ void bw_millis_begin(void);
 u32 bw_millis(void);
 void bw_interrupts_on(void);
 
+/*
+ * The simulator's network device (net.c). Not ESP8266 hardware: it exists
+ * only in the simulator, and bw_net_present() is 0 on a real chip.
+ * Frames are Ethernet II frames: destination, source, type, payload.
+ */
+#define BW_NET_JOINED 1
+#define BW_NET_NO_NETWORK -1
+#define BW_NET_WRONG_PASSWORD -2
+#define BW_NET_NO_DEVICE -3
+int bw_net_present(void);
+int bw_net_join(const char *ssid, const char *password);
+void bw_net_mac(unsigned char mac[6]);
+void bw_net_send(const unsigned char *frame, u32 length);
+/* Copies the waiting frame (at most `room` bytes of it) and returns its full length; 0 if none waits. */
+u32 bw_net_receive(unsigned char *frame, u32 room);
+
 int main(void);
 
 #endif

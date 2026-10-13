@@ -6,6 +6,8 @@ import { LX106Core } from './core/lx106-core';
 import { IMemory, InvalidMemory, Memory, ReadonlyMemory } from './core/memory';
 import { INTSET } from './core/xtensa-regs';
 import { IPeripheral, UnimplementedPeripheral } from './peripherals/base-peripheral';
+import { NetWorld } from './net/world';
+import { BWNet } from './peripherals/bwnet';
 import { ESP8266DPort } from './peripherals/dport';
 import { ESPFRC } from './peripherals/frc';
 import { ESP8266GPIO } from './peripherals/gpio';
@@ -20,6 +22,8 @@ import { ESP8266WDev } from './peripherals/wdev';
 export interface IESP8266Config {
   clock?: ISimulationClock;
   flashSizeMB?: 1 | 2 | 4 | 8;
+  /** The simulated Wi-Fi world this board's network device (BWNet) can join, and its address. */
+  net?: { world: NetWorld; mac?: Uint8Array };
 }
 
 const MB = 1024 * 1024;
@@ -53,6 +57,8 @@ export class ESP8266 {
   readonly uart: ESP8266UART[];
   readonly spi: ESP8266SPI[];
   readonly gpio: ESP8266GPIO;
+  /** The simulator's own network device; not ESP8266 hardware (see peripherals/bwnet.ts). */
+  readonly net: BWNet;
 
   resetReason = 1;
   onReset = () => true;
@@ -86,6 +92,7 @@ export class ESP8266 {
       new ESP8266SPI(this, 0x60000200, 'SPI0', { ...spiConfig, flash: true }),
     ];
     this.gpio = new ESP8266GPIO(this, 0x60000300, 'GPIO', ESP8266Interrupts.ETS_GPIO);
+    this.net = new BWNet(this, 0x60000c00, 'BWNET', this.config.net?.world, this.config.net?.mac);
     this.peripherals = [
       this.gpio,
       ...this.uart,
@@ -99,6 +106,7 @@ export class ESP8266 {
       new UnimplementedPeripheral(this, 0x60000900, 'WDT'),
       new UnimplementedPeripheral(this, 0x60000a00, 'SDIO'),
       new UnimplementedPeripheral(this, 0x60000b00, 'SLC0'),
+      this.net,
       new ESP8266SAR(this, 0x60000d00, 'SAR'),
       new UnimplementedPeripheral(this, 0x60000e00, 'I2S0'),
       new UnimplementedPeripheral(this, 0x60001000, 'rtc_data'),

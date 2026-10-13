@@ -26,7 +26,7 @@ jobs:
           node -r ts-node/register/transpile-only --test test/ 2>&1 | tee out.txt
           # A run that loaded nothing reports zero tests and zero failures.
           tests=$(sed -n 's/^# tests \([0-9]*\)$/\1/p' out.txt | tail -1)
-          [ "${tests:-0}" -ge 19 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
+          [ "${tests:-0}" -ge 28 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
 
   own-firmware:
     # Our own blob-free firmware: built with the stock compiler from firmware/,
@@ -50,31 +50,34 @@ jobs:
             | BINDIR="$HOME/bin" sh -s "${ARDUINO_CLI_VERSION}"
           "$HOME/bin/arduino-cli" core update-index --additional-urls "$ESP8266_INDEX"
           "$HOME/bin/arduino-cli" core install "$ESP8266_CORE" --additional-urls "$ESP8266_INDEX"
-      - name: Build blink
+      - name: Build the programs
         run: |
           set -euo pipefail
           gcc=$(find "$HOME/.arduino15" -name 'xtensa-lx106-elf-gcc' | head -1)
           [ -x "$gcc" ] || { echo "::error::no xtensa-lx106-elf-gcc"; exit 1; }
           mkdir -p out
-          "$gcc" -Os -ffreestanding -nostdlib -nostartfiles -mlongcalls -mtext-section-literals \
-            -Wall -Wextra -Werror -I firmware \
-            -T firmware/bw8266.ld -L firmware -Wl,-Map,out/blink.map \
-            firmware/runtime.c firmware/blink.c -lgcc -o out/blink.elf
-          # Nothing of the SDK or the Arduino core may be linked: only our
-          # objects and the compiler's own libgcc.
-          if grep -E 'tools/sdk|libmain|libphy|libpp|libnet80211|libwpa|liblwip|cores/esp8266' out/blink.map; then
-            echo "::error::the link pulled in SDK or Arduino core code"; exit 1
-          fi
-          node tools/elf2image.js out/blink.elf out/blink.bin
+          for program in blink net-hello; do
+            "$gcc" -Os -ffreestanding -nostdlib -nostartfiles -mlongcalls -mtext-section-literals \
+              -Wall -Wextra -Werror -I firmware \
+              -T firmware/bw8266.ld -L firmware -Wl,-Map,out/$program.map \
+              firmware/runtime.c firmware/net.c firmware/$program.c -lgcc -o out/$program.elf
+            # Nothing of the SDK or the Arduino core may be linked: only our
+            # objects and the compiler's own libgcc.
+            if grep -E 'tools/sdk|libmain|libphy|libpp|libnet80211|libwpa|liblwip|cores/esp8266' out/$program.map; then
+              echo "::error::$program: the link pulled in SDK or Arduino core code"; exit 1
+            fi
+            node tools/elf2image.js out/$program.elf out/$program.bin
+          done
       - name: Run it without the ROM
         env:
           TS_NODE_PROJECT: tsconfig.ts-node.json
           BW8266_BLINK: out/blink.bin
+          BW8266_NET: out/net-hello.bin
         run: |
           set -euo pipefail
-          node -r ts-node/register/transpile-only --test test/own-firmware.test.js 2>&1 | tee out.txt
-          grep -q '^# pass 1$' out.txt || { echo "::error::the own-firmware test did not run and pass"; exit 1; }
-          grep -q '^# skipped 0$' out.txt || { echo "::error::the own-firmware test was skipped"; exit 1; }
+          node -r ts-node/register/transpile-only --test test/own-firmware.test.js test/own-net.test.js 2>&1 | tee out.txt
+          grep -q '^# pass 3$' out.txt || { echo "::error::the own-firmware tests did not all run and pass"; exit 1; }
+          grep -q '^# skipped 0$' out.txt || { echo "::error::an own-firmware test was skipped"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
