@@ -135,9 +135,12 @@ class FRCTimer {
 export class ESPFRC extends BasePeripheral {
   readonly timers;
 
-  constructor(esp: ESP8266, baseAddr: number, name: string, timer1Irq: number) {
+  // The alarm of the second timer (FRC2) is interrupt 10, ETS_FRC_TIMER2_INUM
+  // in the SDK's ets_sys.h: the one the SDK's software timers attach to. The
+  // first timer (FRC1, interrupt 9) has no interrupt model here yet.
+  constructor(esp: ESP8266, baseAddr: number, name: string, timer2Irq: number) {
     super(esp, baseAddr, name);
-    this.timers = [new FRCTimer(esp, 0, -1), new FRCTimer(esp, 1, timer1Irq)];
+    this.timers = [new FRCTimer(esp, 0, -1), new FRCTimer(esp, 1, timer2Irq)];
   }
 
   readUint32(addr: number) {

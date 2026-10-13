@@ -8,5 +8,6 @@ export enum ESP8266Interrupts {
   ETS_SOFT = 7,
   ETS_WDT = 8,
   ETS_FRC_TIMER1 = 9,
+  ETS_FRC_TIMER2 = 10,
   ETS_INT_MAX = 14,
 }

@@ -7,6 +7,8 @@ export class ESP8266WDev extends BasePeripheral {
   readUint32(addr: number) {
     const offset = addr - this.baseAddr;
     switch (offset) {
+      case 0xc00: // The MAC's free-running microsecond counter: the SDK's system_get_time()
+        return Math.floor(this.esp.clock.nanos / 1000) >>> 0;
       case 0xe44: // RNG, read by esp_random()
         return Math.floor(Math.random() * 0x1_0000_0000);
     }

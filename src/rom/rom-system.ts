@@ -242,6 +242,38 @@ export const SYSTEM_FUNCTIONS: Readonly<Record<string, RomFunction>> = {
 
   // ── radio: a table of routines that all answer 0 (see PHY_STUBS in rom-hle.ts) ──
   phy_get_romfuncs: () => 0x3fffc800,
+  // Clear-channel assessment on and off: nothing to switch without a radio.
+  rom_chip_v5_disable_cca: () => undefined,
+  rom_chip_v5_enable_cca: () => undefined,
+
+  // Buffer descriptor chains for the radio's DMA. Each descriptor is three
+  // words: { size:12, length:12, unused:5, sub_sof:1, eof:1, owner:1 },
+  // buffer pointer, next pointer (the SDK's struct sdio_queue layout). The
+  // chain covers `buffer length` bytes in blocks of `block size`; `length`
+  // is left 0 and no end mark is set. Those two choices are assumptions:
+  // nothing here consumes the descriptors, the firmware only keeps the head
+  // and tail it gets back.
+  lldesc_build_chain: (c) => {
+    const [desc, descBytes, buffer, bufferBytes, block, owner, head, tail] = [
+      c.arg(0), c.arg(1), c.arg(2), c.arg(3), c.arg(4), c.arg(5) & 1, c.arg(6), c.arg(7),
+    ];
+    const count = Math.min(Math.floor(descBytes / 12), block ? Math.ceil(bufferBytes / block) : 0);
+    for (let i = 0; i < count; i++) {
+      const at = desc + i * 12;
+      const size = Math.min(block, bufferBytes - i * block) & 0xfff;
+      c.write32(at, (size | (owner << 31)) >>> 0);
+      c.write32(at + 4, buffer + i * block);
+      c.write32(at + 8, i + 1 < count ? at + 12 : 0);
+    }
+    c.write32(head, count ? desc : 0);
+    c.write32(tail, count ? desc + (count - 1) * 12 : 0);
+  },
+  // The descriptor `n - 1` links after `head` (assumed meaning: the last of a run of n).
+  lldesc_num2link: (c) => {
+    let at = c.arg(0);
+    for (let i = 1; i < (c.arg(1) & 0xffff) && at; i++) at = c.read32(at + 8);
+    return at;
+  },
 
   // ── small helpers ──
   roundup2: (c) => ((c.arg(0) + c.arg(1) - 1) & ~(c.arg(1) - 1)) >>> 0,

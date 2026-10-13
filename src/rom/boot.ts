@@ -95,5 +95,8 @@ export function bootFromFlash(esp: ESP8266): ILoadedImage {
   const core = esp.cores[0];
   core.PC = image.entry;
   core.setAR(1, BOOT_STACK);
+  // Firmware runs in user mode, so its exceptions and interrupts go to the
+  // user vector. On the chip the ROM's start-up has set this before any image runs.
+  core.PS_UM = 1;
   return image;
 }

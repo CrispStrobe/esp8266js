@@ -112,6 +112,25 @@ export const PHY_STUB_COUNT = 256;
 /** Where the table itself is kept: in the RAM the ROM uses for its own data. */
 export const PHY_TABLE = 0x3fffc800;
 
+/**
+ * The ROM's exception dispatch table. Firmware that installs its own vectors
+ * (the SDK does, at 0x40100000) still ends up in the ROM: its vector code
+ * looks the handler up in a table the ROM keeps at the start of its RAM, one
+ * word per exception cause, and jumps there. Each slot is seeded to point at
+ * XTOS_ENTRIES + 4 * cause, which leads into the dispatcher below.
+ *
+ * What that vector code has done by the time it jumps was read off the
+ * firmware's own code (Arduino core 3.1.2 images), not off the ROM: a0 is in
+ * EXCSAVE1, the stack pointer is lowered by 0x100, and a2, a3, a4 are stored
+ * at 0x14, 0x18, 0x1c of that frame. An image whose vector code differs
+ * would be dispatched wrongly.
+ */
+export const XTOS_TABLE = 0x3fffc000;
+export const XTOS_ENTRIES = 0x4000f800;
+const XTOS_CAUSES = 64;
+const XTOS_FRAME = 0x100;
+const SR_EXCSAVE1 = 209;
+
 /** The exception vectors, relative to VECBASE (0x40000000: they are in the ROM). */
 const KERNEL_VECTOR = 0x40000030;
 const USER_VECTOR = 0x40000050;
@@ -398,6 +417,21 @@ export class RomHle {
           return true;
         };
       }
+      for (let cause = 0; cause < XTOS_CAUSES; cause++) {
+        const address = XTOS_ENTRIES + cause * 4;
+        this.esp.mapAddress(XTOS_TABLE + cause * 4).writeUint32(XTOS_TABLE + cause * 4, address);
+        breakpoints[address] = (c) => {
+          // Undo what the firmware's vector code did, then dispatch as from a ROM vector.
+          const frame = c.AR(1) >>> 0;
+          const read = (at: number) => this.esp.mapAddress(frame + at).readUint32(frame + at);
+          c.setAR(0, c.specialRegisters[SR_EXCSAVE1]);
+          c.setAR(2, read(0x14));
+          c.setAR(3, read(0x18));
+          c.setAR(4, read(0x1c));
+          c.setAR(1, frame + XTOS_FRAME);
+          return this.exception(c);
+        };
+      }
       breakpoints[GUEST_RETURN] = (c) => this.resume(c);
       breakpoints[WAIT_RESUME] = (c) => this.wake(c);
       breakpoints[KERNEL_VECTOR] = (c) => this.exception(c);
@@ -496,6 +530,12 @@ export class RomHle {
         const isr = this.state.isr.get(number);
         if (!isr) {
           throw new UnhandledException(cause, epc, `interrupt ${number} with no service routine`);
+        }
+        // The two hardware timers interrupt on an edge: the core latches the
+        // request and the dispatcher clears the latch before calling the
+        // routine (a level request would simply still be there afterwards).
+        if (number === 9 || number === 10) {
+          core.specialRegisters[SR_INTSET] &= ~(1 << number);
         }
         this.calls.set('(interrupt)', (this.calls.get('(interrupt)') ?? 0) + 1);
         this.callInto(core, isr.fn, [isr.arg], serve);
