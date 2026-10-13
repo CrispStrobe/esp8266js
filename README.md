@@ -33,6 +33,16 @@ are a different matter: they always carry Espressif's SDK libraries, whose
 licence limits their use to the ESP8266 itself, and this repository's CI does
 not run them.
 
+### An Arduino-style layer
+
+`firmware/arduino/` gives a sketch (`setup` / `loop`) the calls generated
+programs use: `pinMode`, `digitalWrite`, `digitalRead`, `delay`,
+`delayMicroseconds`, `millis`, `micros`, `attachInterrupt`, `shiftOut` and
+`pulseIn`. It is written against the chip's registers; no Arduino core is
+used. `analogRead`, `analogWrite`, `tone` and `Servo` are not provided, and a
+sketch that uses one does not link. `firmware/sketches/` holds the two
+sketches CI builds and runs.
+
 ### A simulated Wi-Fi world
 
 The chip's own Wi-Fi lives in Espressif's radio libraries and is not
