@@ -47,10 +47,11 @@ not run them.
 `firmware/arduino/` gives a sketch (`setup` / `loop`) the calls generated
 programs use: `pinMode`, `digitalWrite`, `digitalRead`, `delay`,
 `delayMicroseconds`, `millis`, `micros`, `attachInterrupt`, `shiftOut` and
-`pulseIn`. It is written against the chip's registers; no Arduino core is
-used. `analogRead`, `analogWrite`, `tone` and `Servo` are not provided, and a
-sketch that uses one does not link. `firmware/sketches/` holds the two
-sketches CI builds and runs.
+`pulseIn`, plus `analogWrite` (1 kHz, 0-255), `tone` and `noTone`, which are
+made in software on the first hardware timer (the chip has no PWM block). It
+is written against the chip's registers; no Arduino core is used.
+`analogRead` and `Servo` are not provided, and a sketch that uses one does
+not link. `firmware/sketches/` holds the sketches CI builds and runs.
 
 ### A simulated Wi-Fi world
 
@@ -115,6 +116,27 @@ What this is not:
 - **It has only run here.** The network device does not exist on a real
   chip, so neither does this interface; the flash-mapped layout follows the
   chip's documented mapping but has not been tried on hardware.
+
+### Other ESP8266 firmware projects
+
+Tasmota, ESPHome, ESPEasy and ESPurna do not avoid Espressif's licence: on the
+ESP8266 they build on the Arduino ESP8266 core, which links Espressif's
+binary SDK libraries (`libphy`, `libpp`, `libnet80211`, `libwpa`, `libmain`).
+Their images are therefore treated like stock Arduino images and are not run
+here. Two routes stay open:
+
+- **Their source, not their images**, against this firmware layer, once it
+  has enough of the Arduino networking API (`ESP8266WiFi`, `WiFiClient`,
+  web server) over lwIP and the simulated network device. A large job.
+- **The ESP32-C3 builds** (Tasmota32, ESPHome), whose Wi-Fi libraries are
+  published under Apache-2.0, on a separate ESP32-C3 simulator. Each image
+  still needs a component-by-component licence check.
+
+esp-open-rtos also links Espressif's radio and Wi-Fi libraries, so it is no
+answer for Wi-Fi. Some of its permissively licensed parts may be taken later,
+each pinned and licence-checked file by file: the FreeRTOS port for the LX106,
+peripheral drivers (I2C, SPI, sensors, displays) and the rboot bootloader. Its
+`open_esplibs`, rewritten from Espressif's libraries, are not used.
 
 The goal is a ROM-free boot: our own stand-ins for the ROM functions that
 firmware actually calls. `census/` and the `rom-census` workflow measure which
