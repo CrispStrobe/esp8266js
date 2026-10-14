@@ -9,6 +9,9 @@ which runs no build step, so the built `dist/` is committed. CI rebuilds it
 with this repository's own compiler and fails if the committed tree differs:
 after changing `src/`, take the `dist` artifact of the CI run (or run
 `npm run build`) and commit `dist/` with the change.
+`dist/cjs/` (CommonJS, the package's `main`) is what Node loads; `dist/`
+itself is ES modules without file extensions in its imports, for bundlers
+(`module`).
 
 This is a fork of [wokwi/esp8266js](https://github.com/wokwi/esp8266js), kept
 under the same MIT licence. It differs in one deliberate way so far:

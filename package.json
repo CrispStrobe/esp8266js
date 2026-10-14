@@ -5,6 +5,7 @@
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
   },
+  "main": "dist/cjs/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -15,7 +16,7 @@
   },
   "scripts": {
     "start": "ts-node --project tsconfig.ts-node.json cli/cli",
-    "build": "rimraf dist && tsc -m esnext",
+    "build": "rimraf dist && tsc -m esnext && tsc -m commonjs --outDir dist/cjs --declaration false",
     "prepublish": "npm run build",
     "prepare": "husky install"
   },
