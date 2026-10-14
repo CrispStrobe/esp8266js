@@ -44,8 +44,8 @@ jobs:
           node -r ts-node/register/transpile-only --test test/ 2>&1 | tee out.txt
           # A run that loaded nothing reports zero tests and zero failures.
           tests=$(sed -n 's/^# tests \([0-9]*\)$/\1/p' out.txt | tail -1)
-          # 28 before lwIP and the bridge; +5 lwIP host tests, +1 own-ip, +1 bridge, +2 sketches (the image tests skip here), +4 first-timer tests.
-          [ "${tests:-0}" -ge 41 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
+          # 28 before lwIP and the bridge; +5 lwIP host tests, +1 own-ip, +1 bridge, +2 sketches (the image tests skip here), +4 first-timer tests, +1 waveform sketch.
+          [ "${tests:-0}" -ge 42 ] || { echo "::error::only ${tests:-0} tests ran"; exit 1; }
 
   own-firmware:
     # Our own blob-free firmware: built with the stock compiler from firmware/,
@@ -109,7 +109,7 @@ jobs:
         run: |
           set -euo pipefail
           gcc=$(find "$HOME/.arduino15" -type f -path '*/bin/xtensa-lx106-elf-gcc' | head -1)
-          for sketch in button pulse; do
+          for sketch in button pulse wave; do
             "$gcc" -Os -ffreestanding -nostdlib -nostartfiles -mlongcalls -mtext-section-literals \
               -Wall -Wextra -Werror -I firmware -I firmware/arduino \
               -T firmware/bw8266.ld -L firmware -Wl,-Map,out/$sketch.map \
@@ -164,10 +164,11 @@ jobs:
           BW8266_IP: out/net-ip.bin
           BW8266_BUTTON: out/button.bin
           BW8266_PULSE: out/pulse.bin
+          BW8266_WAVE: out/wave.bin
         run: |
           set -euo pipefail
           node -r ts-node/register/transpile-only --test test/own-firmware.test.js test/own-net.test.js test/own-ip.test.js test/own-arduino.test.js 2>&1 | tee out.txt
-          grep -q '^# pass 6$' out.txt || { echo "::error::the own-firmware tests did not all run and pass"; exit 1; }
+          grep -q '^# pass 7$' out.txt || { echo "::error::the own-firmware tests did not all run and pass"; exit 1; }
           grep -q '^# skipped 0$' out.txt || { echo "::error::an own-firmware test was skipped"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always()

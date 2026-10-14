@@ -36,6 +36,15 @@ typedef unsigned int u32;
 #define DPORT_EDGE_INT_ENABLE REG(0x3FF00004)
 #define DPORT_EDGE_INT_FRC2 (1u << 2)
 
+/* The first hardware timer (FRC1): a down counter that interrupts at zero. */
+#define FRC1_LOAD REG(0x60000600)
+#define FRC1_CTRL REG(0x60000608)
+#define FRC1_INT REG(0x6000060C)
+#define FRC1_ENABLE (1u << 7)
+#define FRC1_DIVIDE_16 (2u << 1)
+#define FRC1_INTERRUPT 9
+#define DPORT_EDGE_INT_FRC1 (1u << 1)
+
 /* The peripheral clock, and FRC2 ticks per millisecond at divide-by-16. */
 #define APB_HZ 80000000u
 #define FRC2_TICKS_PER_MS (APB_HZ / 16u / 1000u)
