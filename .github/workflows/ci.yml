@@ -18,6 +18,24 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
+      - name: The committed build matches the source
+        # Consumers depend on this repository by commit (github:CrispStrobe/esp8266js#<sha>),
+        # which installs no build step, so dist/ is committed. It must be what the
+        # source builds to with this repository's own compiler.
+        run: |
+          set -euo pipefail
+          npm run build
+          if git ls-files --error-unmatch dist/index.js >/dev/null 2>&1; then
+            git diff --exit-code --stat -- dist || { echo "::error::dist/ is not what the source builds to: rebuild and commit it"; exit 1; }
+            untracked=$(git ls-files --others --exclude-standard -- dist)
+            [ -z "$untracked" ] || { echo "::error::dist/ has files the commit lacks: $untracked"; exit 1; }
+          else
+            echo "::warning::dist/ is not committed yet; the built tree is uploaded as an artifact"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
       - name: Tests
         env:
           TS_NODE_PROJECT: tsconfig.ts-node.json
