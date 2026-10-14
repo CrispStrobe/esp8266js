@@ -1,0 +1,1 @@
+{"version":3,"file":"frequency-clock.js","sourceRoot":"","sources":["../../../src/clock/frequency-clock.ts"],"names":[],"mappings":";;;AAAA,mDAA+C;AAE/C,MAAa,cAAe,SAAQ,4BAAY;IAC9C,IAAI,SAAS;QACX,OAAO,IAAI,CAAC,cAAc,CAAC;IAC7B,CAAC;IAED,IAAI,SAAS,CAAC,SAAiB;QAC7B,IAAI,CAAC,YAAY,CAAC,SAAS,CAAC,CAAC;IAC/B,CAAC;CACF;AARD,wCAQC"}
