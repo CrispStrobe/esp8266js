@@ -104,6 +104,115 @@ unsigned long pulseIn(int pin, int state, unsigned long timeoutMicroseconds) {
   return micros() - began;
 }
 
+/*
+ * Waveforms: each active pin alternates between `high` and `low` FRC2 ticks
+ * (5 per microsecond). The first timer is loaded with the time to the next
+ * edge of any pin, and its interrupt makes the edges that are due.
+ */
+static struct {
+  u32 high, low, next, until;
+  unsigned char active, level, timed;
+} wave[16];
+
+static u32 interrupts_off(void) {
+  u32 state;
+  __asm__ volatile("rsil %0, 15" : "=a"(state));
+  return state;
+}
+
+static void interrupts_restore(u32 state) { __asm__ volatile("wsr %0, ps\n rsync" : : "a"(state) : "memory"); }
+
+static void reschedule(void) {
+  u32 now = FRC2_COUNT, soonest = 0;
+  int any = 0;
+  for (int pin = 0; pin < 16; pin++) {
+    if (!wave[pin].active) continue;
+    if (wave[pin].timed && (int)(bw_millis() - wave[pin].until) >= 0) {
+      wave[pin].active = 0;
+      digitalWrite(pin, LOW);
+      continue;
+    }
+    while ((int)(now - wave[pin].next) >= 0) {
+      wave[pin].level ^= 1;
+      digitalWrite(pin, wave[pin].level);
+      wave[pin].next += wave[pin].level ? wave[pin].high : wave[pin].low;
+    }
+    u32 wait = wave[pin].next - now;
+    if (!any || wait < soonest) soonest = wait;
+    any = 1;
+  }
+  if (!any) {
+    FRC1_CTRL = 0;
+    return;
+  }
+  FRC1_CTRL = FRC1_ENABLE | FRC1_DIVIDE_16;
+  FRC1_LOAD = soonest < 10 ? 10 : soonest;
+}
+
+static void timer_interrupt(void *unused) {
+  (void)unused;
+  FRC1_INT = 1;
+  reschedule();
+}
+
+static void start_wave(int pin, u32 high, u32 low, unsigned long milliseconds) {
+  static int attached;
+  if (!attached) {
+    attached = 1;
+    ets_isr_attach(FRC1_INTERRUPT, timer_interrupt, 0);
+    DPORT_EDGE_INT_ENABLE |= DPORT_EDGE_INT_FRC1;
+    ets_isr_unmask(1u << FRC1_INTERRUPT);
+  }
+  u32 state = interrupts_off();
+  wave[pin].high = high;
+  wave[pin].low = low;
+  wave[pin].level = 1;
+  wave[pin].timed = milliseconds != 0;
+  wave[pin].until = bw_millis() + milliseconds;
+  digitalWrite(pin, HIGH);
+  wave[pin].next = FRC2_COUNT + high;
+  wave[pin].active = 1;
+  reschedule();
+  interrupts_restore(state);
+}
+
+static void stop_wave(int pin, int level) {
+  u32 state = interrupts_off();
+  wave[pin].active = 0;
+  digitalWrite(pin, level);
+  reschedule();
+  interrupts_restore(state);
+}
+
+#define PWM_PERIOD 5000u /* 1 kHz in FRC2 ticks */
+
+void analogWrite(int pin, int value) {
+  if (!usable(pin)) return;
+  pinMode(pin, OUTPUT);
+  if (value <= 0) stop_wave(pin, LOW);
+  else if (value >= 255) stop_wave(pin, HIGH);
+  else {
+    u32 high = PWM_PERIOD * (u32)value / 255u;
+    start_wave(pin, high, PWM_PERIOD - high, 0);
+  }
+}
+
+void tone(int pin, unsigned int frequency, unsigned long durationMilliseconds) {
+  if (!usable(pin)) return;
+  pinMode(pin, OUTPUT);
+  if (!frequency) {
+    stop_wave(pin, LOW);
+    return;
+  }
+  u32 half = 2500000u / frequency;
+  if (!half) half = 1;
+  start_wave(pin, half, half, durationMilliseconds);
+}
+
+void noTone(int pin) {
+  if (usable(pin)) stop_wave(pin, LOW);
+}
+
 int main(void) {
   bw_millis_begin();
   bw_interrupts_on();

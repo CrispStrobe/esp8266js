@@ -4,13 +4,15 @@
  * and no Espressif SDK code is involved.
  *
  * PROVIDED: pinMode, digitalWrite, digitalRead, delay, delayMicroseconds,
- * millis, micros, attachInterrupt, detachInterrupt, shiftOut, pulseIn, and
- * the runtime's own serial calls (bw_serial_begin, bw_serial_write).
+ * millis, micros, attachInterrupt, detachInterrupt, shiftOut, pulseIn,
+ * analogWrite (1 kHz, values 0-255), tone, noTone, and the runtime's own
+ * serial calls (bw_serial_begin, bw_serial_write). analogWrite and tone are
+ * made in software on the first hardware timer, as on the chip there is no
+ * PWM block; tone takes three arguments (0 milliseconds: until noTone).
  *
  * NOT PROVIDED, and a sketch that uses one does not link:
  *   analogRead   the chip's converter is driven through undocumented registers
- *   analogWrite, tone, noTone, Servo   they need the first hardware timer's
- *                interrupt, which the simulator does not model yet
+ *   Servo        a C++ class; analogWrite at 50 Hz is not offered either
  *
  * Pins are GPIO numbers. GPIO 0-5 and 12-15 are usable; 6-11 are wired to
  * the flash chip on every module and GPIO16 belongs to a different block:
@@ -45,6 +47,9 @@ void attachInterrupt(int pin, void (*routine)(void), int mode);
 void detachInterrupt(int pin);
 void shiftOut(int dataPin, int clockPin, int bitOrder, unsigned char value);
 unsigned long pulseIn(int pin, int state, unsigned long timeoutMicroseconds);
+void analogWrite(int pin, int value);
+void tone(int pin, unsigned int frequency, unsigned long durationMilliseconds);
+void noTone(int pin);
 
 /* The sketch. */
 void setup(void);
